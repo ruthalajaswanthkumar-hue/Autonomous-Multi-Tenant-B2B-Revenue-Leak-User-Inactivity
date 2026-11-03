@@ -1,0 +1,13 @@
+{
+  "name": "02 - Product Usage Ingestion",
+  "active": false,
+  "nodes": [
+    {"id":"usage-webhook","name":"Normalized Usage Event","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0],"parameters":{"httpMethod":"POST","path":"revenue-leakage/usage","responseMode":"lastNode"}},
+    {"id":"usage-upsert","name":"Idempotent Usage Upsert","type":"n8n-nodes-base.postgres","typeVersion":2.5,"position":[280,0],"parameters":{"operation":"executeQuery","query":"INSERT INTO product_usage (external_event_id, customer_id, usage_period_start, usage_period_end, usage_data, source_updated_at) VALUES ($1, $2::uuid, $3::date, $4::date, $5::jsonb, $6::timestamptz) ON CONFLICT (external_event_id) DO UPDATE SET usage_data = excluded.usage_data, source_updated_at = excluded.source_updated_at;","options":{"queryReplacement":"={{ [$json.body.event_id, $json.body.customer_id, $json.body.period_start, $json.body.period_end, JSON.stringify($json.body.metrics), $json.body.source_updated_at] }}"}}}
+  ],
+  "connections":{"Normalized Usage Event":{"main":[[{"node":"Idempotent Usage Upsert","type":"main","index":0}]]}},
+  "settings":{"executionOrder":"v1"},
+  "versionId":"0292bcf0-1cea-49e7-af3a-d680559de46f",
+  "meta":{"evidence":"inactive adapter template; live product API execution is not claimed"},
+  "tags":[]
+}

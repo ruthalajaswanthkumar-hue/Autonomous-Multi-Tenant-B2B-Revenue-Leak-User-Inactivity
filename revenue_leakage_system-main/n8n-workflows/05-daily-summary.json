@@ -1,0 +1,115 @@
+{
+  "active": false,
+  "name": "05 - Daily Leakage Summary Report",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 17 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-summary",
+      "name": "Every Day at 5 PM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "leakage_detections",
+        "filterType": "string",
+        "filterString": "detection_date=eq.{{ $today.toISODate() }}",
+        "returnAll": true
+      },
+      "id": "get-todays-detections",
+      "name": "Get Today's Detections",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-creds",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aggregate leakage data for daily report\n\nconst detections = $input.all();\n\nif (detections.length === 0) {\n  return [{\n    json: {\n      has_detections: false,\n      message: '✅ No revenue leakage detected today'\n    }\n  }];\n}\n\n// Initialize summary\nconst summary = {\n  total_detections: detections.length,\n  total_monthly_leakage: 0,\n  by_severity: { high: 0, medium: 0, low: 0 },\n  by_type: {},\n  high_severity_items: []\n};\n\n// Aggregate\ndetections.forEach(item => {\n  const d = item.json;\n  \n  summary.total_monthly_leakage += parseFloat(d.monthly_leakage_amount || 0);\n  summary.by_severity[d.severity]++;\n  \n  if (!summary.by_type[d.leakage_type]) {\n    summary.by_type[d.leakage_type] = {\n      count: 0,\n      amount: 0\n    };\n  }\n  summary.by_type[d.leakage_type].count++;\n  summary.by_type[d.leakage_type].amount += parseFloat(d.monthly_leakage_amount || 0);\n  \n  // Collect high severity items\n  if (d.severity === 'high') {\n    summary.high_severity_items.push({\n      customer_id: d.customer_id,\n      type: d.leakage_type,\n      amount: d.monthly_leakage_amount,\n      description: d.description\n    });\n  }\n});\n\n// Calculate annual impact\nconst annualLeakage = summary.total_monthly_leakage * 12;\n\n// Format type breakdown\nconst typeBreakdown = Object.entries(summary.by_type)\n  .map(([type, data]) => `• ${type.replace(/_/g, ' ')}: ${data.count} (\\$${data.amount.toFixed(2)})`)\n  .join('\\n');\n\n// Format high severity items\nconst highSeverityList = summary.high_severity_items.length > 0\n  ? summary.high_severity_items\n      .map(item => `• ${item.type}: \\$${item.amount} - ${item.description.substring(0, 80)}...`)\n      .join('\\n')\n  : 'None';\n\nconst message = `📊 *Daily Revenue Leakage Report*\n\n*Date:* ${new Date().toLocaleDateString()}\n\n*Summary:*\n• Total Detections: ${summary.total_detections}\n• Monthly Leakage: \\$${summary.total_monthly_leakage.toLocaleString()}\n• Annual Impact: \\$${annualLeakage.toLocaleString()}\n\n*By Severity:*\n🔴 High: ${summary.by_severity.high}\n🟡 Medium: ${summary.by_severity.medium}\n🟢 Low: ${summary.by_severity.low}\n\n*By Type:*\n${typeBreakdown}\n\n*High Priority Items:*\n${highSeverityList}\n\n_View full details in dashboard_`;\n\nreturn [{\n  json: {\n    has_detections: true,\n    summary: summary,\n    message: message,\n    total_monthly: summary.total_monthly_leakage,\n    total_annual: annualLeakage\n  }\n}];"
+      },
+      "id": "aggregate-data",
+      "name": "Aggregate Summary Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "content": "={{ $json.message }}",
+        "channel": "revenue-alerts",
+        "otherOptions": {}
+      },
+      "id": "send-slack-summary",
+      "name": "Send Slack Summary",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.1,
+      "position": [850, 300],
+      "credentials": {
+        "slackApi": {
+          "id": "slack-creds",
+          "name": "Slack account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every Day at 5 PM": {
+      "main": [
+        [
+          {
+            "node": "Get Today's Detections",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Today's Detections": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Summary Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Summary Data": {
+      "main": [
+        [
+          {
+            "node": "Send Slack Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}
