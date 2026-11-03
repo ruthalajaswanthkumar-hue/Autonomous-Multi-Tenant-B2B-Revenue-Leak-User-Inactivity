@@ -1,0 +1,25 @@
+services:
+  postgres:
+    image: postgres:16.4-alpine
+    environment:
+      POSTGRES_DB: revenue_leakage
+      POSTGRES_USER: revenue_leakage
+      POSTGRES_PASSWORD: local-test-only
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U revenue_leakage -d revenue_leakage"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+    volumes:
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+      - ./database/sample-data.sql:/docker-entrypoint-initdb.d/002-sample.sql:ro
+
+  engine:
+    build: .
+    environment:
+      LEAKAGE_ENGINE_TOKEN: local-test-only
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy

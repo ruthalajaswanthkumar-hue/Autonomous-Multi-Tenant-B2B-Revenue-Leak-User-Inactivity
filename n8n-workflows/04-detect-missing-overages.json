@@ -1,0 +1,14 @@
+{
+  "name":"04 - Evaluate Overage Rule",
+  "active":false,
+  "nodes":[
+    {"id":"overage-webhook","name":"Overage Evaluation Request","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0],"parameters":{"httpMethod":"POST","path":"revenue-leakage/evaluate/overage","responseMode":"lastNode"}},
+    {"id":"overage-service","name":"Run Versioned Rule","type":"n8n-nodes-base.httpRequest","typeVersion":4.2,"position":[260,0],"parameters":{"method":"POST","url":"={{ $env.LEAKAGE_ENGINE_URL + '/v1/evaluate' }}","sendHeaders":true,"headerParameters":{"parameters":[{"name":"Authorization","value":"={{ 'Bearer ' + $env.LEAKAGE_ENGINE_TOKEN }}"}]},"sendBody":true,"contentType":"raw","rawContentType":"application/json","body":"={{ JSON.stringify({...$json.body, rule: 'missing_overage'}) }}"}},
+    {"id":"persist-overage","name":"Persist Deduplicated Finding","type":"n8n-nodes-base.postgres","typeVersion":2.5,"position":[520,0],"parameters":{"operation":"executeQuery","query":"SELECT persist_leakage_evaluation($1::jsonb);","options":{"queryReplacement":"={{ [JSON.stringify($json)] }}"}}}
+  ],
+  "connections":{"Overage Evaluation Request":{"main":[[{"node":"Run Versioned Rule","type":"main","index":0}]]},"Run Versioned Rule":{"main":[[{"node":"Persist Deduplicated Finding","type":"main","index":0}]]}},
+  "settings":{"executionOrder":"v1"},
+  "versionId":"a4d335d7-2fca-428e-8653-f84182efefc4",
+  "meta":{"evidence":"orchestration artifact; overage math is owned by the tested Python service"},
+  "tags":[]
+}
